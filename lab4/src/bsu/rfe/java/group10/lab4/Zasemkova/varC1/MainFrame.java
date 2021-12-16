@@ -4,19 +4,9 @@ package bsu.rfe.java.group10.lab4.Zasemkova.varC1;
 import java.awt.BorderLayout;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import javax.swing.AbstractAction;
-import javax.swing.Action;
-import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JOptionPane;
+import java.io.*;
+import java.util.ArrayList;
+import javax.swing.*;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 
@@ -29,12 +19,15 @@ public class MainFrame extends JFrame {
     private JCheckBoxMenuItem showAxisMenuItem;
     private JCheckBoxMenuItem showMarkersMenuItem;
     private JCheckBoxMenuItem showGridMenuItem;
+    private JMenuItem resetGraphicsMenuItem;
     private GraphicsDisplay display = new GraphicsDisplay();
     private boolean fileLoaded = false;
 
+    private JMenuItem saveToBinMI;
+
     public MainFrame() {
 
-        super("Построение графиков функций на основе заранее подготовленных файлов");
+        super("Построение графиков функций на основе заранее подготовленных файлов/Обработка событий от мыши");
         setSize(WIDTH, HEIGHT);
         Toolkit kit = Toolkit.getDefaultToolkit();
         setLocation((kit.getScreenSize().width - WIDTH) / 2, (kit.getScreenSize().height - HEIGHT) / 2);
@@ -58,6 +51,15 @@ public class MainFrame extends JFrame {
         };
 
         fileMenu.add(openGraphicsAction);
+
+        Action resetGraphicsAction = new AbstractAction("Отменить все изменения") {
+            public void actionPerformed(ActionEvent event) {
+                MainFrame.this.display.reset();
+            }
+        };
+        this.resetGraphicsMenuItem = fileMenu.add(resetGraphicsAction);
+        this.resetGraphicsMenuItem.setEnabled(false);
+        this.getContentPane().add(this.display, "Center");
 
         JMenu graphicsMenu = new JMenu("График");
         menuBar.add(graphicsMenu);
@@ -92,6 +94,21 @@ public class MainFrame extends JFrame {
         graphicsMenu.add(showGridMenuItem);
         showGridMenuItem.setSelected(true);
 
+        Action saveToBinAction = new AbstractAction("Сохранить в .bin") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (fileChooser == null) {
+                    fileChooser = new JFileChooser();
+                    fileChooser.setCurrentDirectory(new File("."));
+                }
+                if (fileChooser.showSaveDialog(MainFrame.this) == JFileChooser.APPROVE_OPTION) {
+                    saveToBin(new File(fileChooser.getSelectedFile().getName().concat(".bin")));
+                }
+            }
+        };
+        saveToBinMI = fileMenu.add(saveToBinAction);
+        saveToBinMI.setEnabled(false);
+
         graphicsMenu.addMenuListener(new GraphicsMenuListener());
         getContentPane().add(display, BorderLayout.CENTER);
     }
@@ -99,28 +116,39 @@ public class MainFrame extends JFrame {
     protected void openGraphics(File selectedFile) {
         try {
             DataInputStream in = new DataInputStream(new FileInputStream(selectedFile));
-            //Всего байт в потоке - in.available() байт;
-            //Размер числа Double - Double.SIZE бит, или Double.SIZE/8 байт;
-            //Так как числа записываются парами, то число пар меньше в 2 раза
-            Double[][] graphicsData = new Double[in.available() / (Double.SIZE / 8) / 2][];
-            int i = 0;
-            while (in.available() > 0) {
+            ArrayList graphicsData = new ArrayList(50);
+
+            while(in.available() > 0) {
                 Double x = in.readDouble();
                 Double y = in.readDouble();
-                graphicsData[i++] = new Double[]{x, y};
+                graphicsData.add(new Double[]{x, y});
             }
-            if (graphicsData != null && graphicsData.length > 0) {
-                fileLoaded = true;
-                display.showGraphics(graphicsData);
+
+            if (graphicsData.size() > 0) {
+                this.fileLoaded = true;
+                this.resetGraphicsMenuItem.setEnabled(true);
+                this.display.showGraphics(graphicsData);
+                saveToBinMI.setEnabled(true);
             }
-            in.close();
-        } catch (FileNotFoundException ex) {
-            JOptionPane.showMessageDialog(MainFrame.this, "Указанный файл не найден", "Ошибка загрузки данных", JOptionPane.WARNING_MESSAGE);
-            return;
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(MainFrame.this, "Ошибка чтения координат точек из файла", "Ошибка загрузки данных",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
+
+        } catch (FileNotFoundException var6) {
+            JOptionPane.showMessageDialog(this, "Указанный файл не найден", "Ошибка загрузки данных", 2);
+        } catch (IOException var7) {
+            JOptionPane.showMessageDialog(this, "Ошибка чтения координат точек из файла", "Ошибка загрузки данных", 2);
+        }
+    }
+
+    void saveToBin(File file) {
+        try {
+            DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+            ArrayList<Double[]> data = display.getGraphicsData();
+            for (int i = 0; i < data.size(); i++) {
+                out.writeDouble(data.get(i)[0]);
+                out.writeDouble(data.get(i)[1]);
+            }
+            out.close();
+        } catch (Exception ignore) {
+
         }
     }
 
@@ -134,6 +162,7 @@ public class MainFrame extends JFrame {
         public void menuSelected(MenuEvent e) {
             showAxisMenuItem.setEnabled(fileLoaded);
             showMarkersMenuItem.setEnabled(fileLoaded);
+            showGridMenuItem.setEnabled(fileLoaded);
         }
 
         public void menuDeselected(MenuEvent e) {
